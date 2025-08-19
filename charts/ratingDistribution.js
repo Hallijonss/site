@@ -1,4 +1,4 @@
-import { defaultLayout, defaultHover } from './chartStyle.js';
+import { defaultLayout, defaultHover, defaultMarker } from './chartStyle.js';
 
 export function renderRatingDistribution(data, source) {
   const values = [];
@@ -27,7 +27,7 @@ export function renderRatingDistribution(data, source) {
     x: values,
     type: 'histogram',
     xbins: { start: xStart, end: xEnd, size: bin },
-    marker: { color: '#00ff7f' },
+    marker: defaultMarker,
     hoverlabel: defaultHover?.hoverlabel
   };
 
