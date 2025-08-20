@@ -462,6 +462,9 @@ $("guess-input")?.addEventListener("keydown", (e) => {
 
   // History CSV download
   $("download-elo-history")?.addEventListener("click", downloadEloHistoryCSV);
+
+  // guess stats
+  renderGuessStats();
 });
 
 // =========================
@@ -1539,6 +1542,43 @@ function saveFindSession() {
 // Guess the Movie (no emojis)
 // =========================
 let guessGame = null; 
+
+// Guess-the-Movie stats (persisted)
+let guessStats = (() => {
+  try { return JSON.parse(localStorage.getItem("guessStats")) || {}; } catch { return {}; }
+})();
+guessStats = {
+  wins:   Number.isFinite(guessStats.wins) ? guessStats.wins : 0,
+  losses: Number.isFinite(guessStats.losses) ? guessStats.losses : 0,
+  streak: Number.isFinite(guessStats.streak) ? guessStats.streak : 0,   // current streak (wins)
+  best:   Number.isFinite(guessStats.best) ? guessStats.best : 0        // best win streak
+};
+
+function saveGuessStats() {
+  localStorage.setItem("guessStats", JSON.stringify(guessStats));
+}
+
+function renderGuessStats() {
+  const el = document.getElementById("guess-stats");
+  if (!el) return; // silently skip if you didn't add a stats element
+  el.textContent = `Wins: ${guessStats.wins} • Losses: ${guessStats.losses} • Streak: ${guessStats.streak} (best: ${guessStats.best})`;
+}
+
+function recordGuessWin() {
+  guessStats.wins += 1;
+  guessStats.streak += 1;
+  if (guessStats.streak > guessStats.best) guessStats.best = guessStats.streak;
+  saveGuessStats();
+  renderGuessStats();
+}
+
+function recordGuessLoss() {
+  guessStats.losses += 1;
+  guessStats.streak = 0;
+  saveGuessStats();
+  renderGuessStats();
+}
+
 // { mode:'elo'|'popular', movieId, title, year, images:[file_path...], idx:0, attempts:0, normAnswer }
 
 async function guessPickFromElo() {
@@ -1588,13 +1628,16 @@ async function startGuessRound(mode = "elo") {
     images: backdrops,
     idx: 0,
     attempts: 0,
-    normAnswer: normalizeTitle(chosen.title)
+    normAnswer: normalizeTitle(chosen.title),
+    resolved: false     // ⬅️ add this
   };
 
   $("guess-feedback").textContent = "";
   $("guess-input").value = "";
   $("guess-image-msg").textContent = "";
   renderGuessScene();
+
+  
 }
 
 function renderGuessScene() {
@@ -1631,11 +1674,16 @@ async function onSubmitGuess() {
   const ok = (guessNorm === ans) || guessNorm.includes(ans) || ans.includes(guessNorm);
 
   if (ok) {
-    $("guess-feedback").textContent = `✅ Well done! It was “${guessGame.title}${guessGame.year ? ` (${guessGame.year})` : ""}”. You got it in ${guessGame.attempts} guess${guessGame.attempts>1?"es":""}.`;
-  } else {
-    $("guess-feedback").textContent = `❌ Not it — try another guess.`;
-    advanceGuessImage();
+  if (!guessGame.resolved) {
+    guessGame.resolved = true;
+    recordGuessWin();
   }
+  $("guess-feedback").textContent = `✅ Well done! It was “${guessGame.title}${guessGame.year ? ` (${guessGame.year})` : ""}”. You got it in ${guessGame.attempts} guess${guessGame.attempts > 1 ? "es" : ""}.`;
+} else {
+  $("guess-feedback").textContent = `❌ Not it — try another guess.`;
+  advanceGuessImage();
+}
+
 }
 function advanceGuessImage() {
   if (!guessGame) return;
@@ -1644,15 +1692,36 @@ function advanceGuessImage() {
     renderGuessScene();
   } else {
     $("guess-image-msg").textContent = "No more images — you can reveal or try another guess.";
+    // Optionally mark an unresolved round as a loss now:
+    // if (!guessGame.resolved) { guessGame.resolved = true; recordGuessLoss(); }
   }
 }
+
+
 function onRevealAnswer() {
   if (!guessGame) return;
-  $("guess-feedback").textContent = `ℹ️ It was “${guessGame.title}${guessGame.year ? ` (${guessGame.year})` : ""}”.`;
+
+  // Treat a reveal as a loss if the round wasn't already won/lost
+  if (!guessGame.resolved) {
+    guessGame.resolved = true;
+    recordGuessLoss();          // updates totals, streak, localStorage, UI
+  }
+
+  $("guess-feedback").textContent =
+    `ℹ️ It was “${guessGame.title}${guessGame.year ? ` (${guessGame.year})` : ""}”.`;
 }
+
+// Replace your existing onSkipRound with this
 function onSkipRound() {
-  const source = $("guessSourceSwitch")?.checked ? "popular" : "elo";
-  startGuessRound(source);
+  const mode = $("guessSourceSwitch")?.checked ? "popular" : "elo";
+
+  // Treat a skip as a loss if the round wasn't already resolved
+  if (guessGame && !guessGame.resolved) {
+    guessGame.resolved = true;
+    recordGuessLoss();          // updates totals, streak, localStorage, UI
+  }
+
+  startGuessRound(mode);        // new round, same source mode
 }
 
 // =========================
