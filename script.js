@@ -1380,9 +1380,9 @@ function startFindSession(title, year) {
   const mu = meanEloOrSeed();
 
   // 10 balanced + 10 random (not overlapping)
-  const balanced = pickFindOpponents(10);
+  const balanced = pickFindOpponents(15);
   const exclude = new Set(balanced.concat([key]));
-  const randoms  = pickRandomOpponents(exclude, 10);
+  const randoms  = pickRandomOpponents(exclude, 15);
 
   const opponents = shuffle(balanced.concat(randoms));
 
